@@ -1,0 +1,30 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "4GsdQJU7fUEwDvNks51Yf"
+uri = "file://reports/real-trade-reconstruction-validation.md"
+type = "text"
+title = "Real Robinhood Reconstruction Validation"
+description = "Concise validation report covering source quality, live import results, simple trades, Wheel cases, defects, and the minimal follow-up work."
+logical_id = "54404e66-740d-4060-97f0-1c7cedc44a54"
+content_hash = "sha256:f3d6070aadc38d6513200909511e78b98d154e31e8f02026b0ffc950eec633fb"
+size = 10118
+mtime_ms = 1787414214705
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:5f530713-8d2b-4029-a42b-6c3d5893e619/54404e66-740d-4060-97f0-1c7cedc44a54/9bd714c0-968a-444a-bcf0-fd1696038525"
+storage_version_token = "1787414339357793"
+content_type = "text/markdown"
+
+[[outputs]]
+id = "Utbp81H-ISYKyaB83XfBX"
+uri = "file://exports/tally-sense-development-status.pdf"
+type = "pdf"
+title = "Tally Sense — Product & Development Status"
+description = "Six-page PDF covering the product, implemented features, development progress, open issues, known bugs, limitations, and recommended next work."
+logical_id = "8c8d0796-ad53-4463-b577-6413a6a0b9e4"
+content_hash = "sha256:4a99d596674febce48c60c2bf0ba4a733a4bd0e4feb236d5a546dd4777e28f95"
+size = 238382
+mtime_ms = 1789048186511
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:5f530713-8d2b-4029-a42b-6c3d5893e619/8c8d0796-ad53-4463-b577-6413a6a0b9e4/5de9a066-5cc7-480f-9754-498659a90ded"
+storage_version_token = "1789048267616332"
+content_type = "application/pdf"
