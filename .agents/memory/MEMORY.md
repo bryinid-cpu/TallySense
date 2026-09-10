@@ -1,0 +1,10 @@
+- [API schema compatibility](api-schema-version-compatibility.md) — OpenAPI integer schemas currently generate unsupported zod.int() in this workspace.
+- [Historical import reconciliation](historical-import-reconciliation.md) — Scope source records by format/account and surface fallback collisions as review items, never silent updates.
+- [Robinhood activity CSV validation](robinhood-activity-csv-validation.md) — Real activity exports lack file-level account and stable record IDs; parse RFC4180 rows before normalization.
+- [Reconciliation review schema migrations](reconciliation-review-schema-migrations.md) — Add review-audit fields additively when prior ambiguity columns exist; preserve raw evidence.
+- [Multi-fill reconstruction](multi-fill-reconstruction.md) — Aggregate only fully reconcilable execution groups; retain overflow and coverage conflicts for review.
+- [Campaign link review](campaign-link-review.md) — Resolve ambiguous campaign ownership after normalization without conflating it with deduplication or leg grouping.
+- [Workspace schema typecheck order](workspace-schema-typecheck-order.md) — Rebuild referenced libraries before interpreting API type errors after schema edits.
+- [Account-resolution concurrency](account-resolution-concurrency.md) — A retained evidence row has one locked, authoritative account decision; repeat attempts are conflicts.
+- [Stock allocation chronology](stock-allocation-chronology.md) — Process stock sales and call coverage in one timeline; conserve integer remainders and pair call-away cash once.
+- [Residual diagnosis semantics](residual-diagnosis-semantics.md) — Residual quantities are unresolved, not allocated; report completeness must derive from typed impact flags per dimension.
