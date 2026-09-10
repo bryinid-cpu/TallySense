@@ -1,0 +1,1207 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: dashboard
+    description: Trading performance summaries
+  - name: trades
+    description: Normalized trading activity
+  - name: imports
+    description: Robinhood report imports
+  - name: wheel
+    description: Reconstructed wheel campaigns
+  - name: economics
+    description: Economic residual diagnosis and historical basis
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [dashboard]
+      summary: Get trading dashboard
+      parameters:
+        - $ref: "#/components/parameters/AnalysisPeriod"
+        - $ref: "#/components/parameters/AnalysisStartDate"
+        - $ref: "#/components/parameters/AnalysisEndDate"
+        - $ref: "#/components/parameters/AccountIdentifier"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/CampaignStatus"
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+  /performance/by-symbol:
+    get:
+      operationId: getPerformanceBySymbol
+      tags: [dashboard]
+      summary: Get performance grouped by symbol
+      parameters:
+        - $ref: "#/components/parameters/AnalysisPeriod"
+        - $ref: "#/components/parameters/AnalysisStartDate"
+        - $ref: "#/components/parameters/AnalysisEndDate"
+        - $ref: "#/components/parameters/AccountIdentifier"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/CampaignStatus"
+      responses:
+        "200":
+          description: Symbol performance
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SymbolPerformance"
+  /trades:
+    get:
+      operationId: listTrades
+      tags: [trades]
+      summary: List normalized trades
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: number
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: symbol
+          in: query
+          schema:
+            type: string
+        - name: outcome
+          in: query
+          schema:
+            type: string
+            enum: [win, loss, breakeven]
+        - $ref: "#/components/parameters/AnalysisPeriod"
+        - $ref: "#/components/parameters/AnalysisStartDate"
+        - $ref: "#/components/parameters/AnalysisEndDate"
+        - $ref: "#/components/parameters/AccountIdentifier"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/CampaignStatus"
+      responses:
+        "200":
+          description: Trade list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Trade"
+  /imports:
+    get:
+      operationId: listImports
+      tags: [imports]
+      summary: List report imports
+      parameters:
+        - $ref: "#/components/parameters/AccountIdentifier"
+      responses:
+        "200":
+          description: Import history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Import"
+    post:
+      operationId: createImport
+      tags: [imports]
+      summary: Import normalized Robinhood activity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportInput"
+      responses:
+        "201":
+          description: Import created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Import"
+  /imports/review:
+    get:
+      operationId: listImportReviewRows
+      tags: [imports]
+      summary: List retained activity that needs account, reconciliation, or Wheel campaign-link review
+      responses:
+        "200":
+          description: Retained raw rows and normalized source evidence needing account assignment
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ImportReviewRow"
+  /imports/resolve:
+    post:
+      operationId: resolveImportReview
+      tags: [imports]
+      summary: Resolve one ambiguous retained brokerage row or Wheel campaign-link decision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportReviewResolutionInput"
+      responses:
+        "200":
+          description: Review decision applied and affected account rebuilt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportReviewResolution"
+        "400":
+          description: Invalid review decision
+        "404":
+          description: Review row or target record not found
+        "409":
+          description: Review decision would create a reconciliation collision
+  /imports/resolve-account:
+    post:
+      operationId: resolveImportAccount
+      tags: [imports]
+      summary: Assign retained activity to a detected brokerage account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportAccountResolutionInput"
+      responses:
+        "200":
+          description: Account assignment completed and affected account rebuilt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportAccountResolution"
+        "400":
+          description: Invalid account assignment request
+        "404":
+          description: Review row or account not found
+        "409":
+          description: Assignment would create a reconciliation collision
+  /imports/{importId}/records:
+    get:
+      operationId: listImportSourceRecords
+      tags: [imports]
+      summary: List retained source records for one import in original logical order
+      parameters:
+        - name: importId
+          in: path
+          required: true
+          schema: { type: number }
+        - name: limit
+          in: query
+          description: Page size. The server accepts whole numbers from 1 through 100 and defaults to 25.
+          schema: { type: number }
+        - name: offset
+          in: query
+          description: Zero-based record offset. The server accepts non-negative whole numbers and defaults to 0.
+          schema: { type: number }
+        - name: recordKind
+          in: query
+          description: Return only retained records of this evidence kind.
+          schema: { type: string, enum: [activity, blank, footer, malformed] }
+        - name: accountIdentifier
+          in: query
+          description: Return only retained records assigned to this account scope.
+          schema: { type: string, minLength: 1 }
+        - name: normalizationStatus
+          in: query
+          description: Return records with or without at least one normalized event or trade.
+          schema: { type: string, enum: [normalized, not_normalized] }
+        - name: ordinal
+          in: query
+          description: Return the retained record with this exact logical CSV record number.
+          schema: { type: number }
+        - name: search
+          in: query
+          description: Return records whose retained CSV source text contains this literal text, case-insensitively. Percent, underscore, and backslash are not wildcards.
+          schema: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        "200":
+          description: Paginated retained CSV source evidence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportSourceRecordPage"
+        "400":
+          description: Invalid import identifier or pagination parameters
+        "404":
+          description: Import not found
+  /accounts:
+    get:
+      operationId: listAccounts
+      tags: [imports]
+      summary: List detected brokerage accounts and coverage
+      responses:
+        "200":
+          description: Detected account summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AccountSummary"
+  /account-review:
+    get:
+      operationId: listAccountReviewItems
+      tags: [imports]
+      summary: List source rows that need account assignment
+      responses:
+        "200":
+          description: Account review queue
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AccountReviewItem"
+    post:
+      operationId: assignAccountReview
+      tags: [imports]
+      summary: Assign retained source rows to a brokerage account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountAssignmentInput"
+      responses:
+        "200":
+          description: Assignment result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountAssignmentResult"
+        "400":
+          description: Invalid assignment
+        "409":
+          description: Assignment would collide with an existing account-scoped record
+  /wheel/summary:
+    get:
+      operationId: getWheelSummary
+      tags: [wheel]
+      summary: Get wheel campaign summary
+      parameters:
+        - $ref: "#/components/parameters/AnalysisPeriod"
+        - $ref: "#/components/parameters/AnalysisStartDate"
+        - $ref: "#/components/parameters/AnalysisEndDate"
+        - $ref: "#/components/parameters/AccountIdentifier"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/CampaignStatus"
+      responses:
+        "200":
+          description: Wheel campaign summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WheelSummary"
+  /economic-residuals:
+    get:
+      operationId: listEconomicResiduals
+      tags: [economics]
+      summary: List grouped economic residuals
+      parameters:
+        - $ref: "#/components/parameters/AccountIdentifier"
+        - name: symbol
+          in: query
+          schema: { type: string }
+        - name: reasonCode
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [residual, allocated] }
+        - name: limit
+          in: query
+          schema: { type: number, minimum: 1, maximum: 200, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: number, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: Grouped residual summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EconomicResidualSummary" }
+  /economic-residuals/{allocationKey}:
+    get:
+      operationId: getEconomicResidual
+      tags: [economics]
+      summary: Get residual diagnosis and audit history
+      parameters:
+        - name: allocationKey
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Residual detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EconomicResidualDetail" }
+        "404": { description: Residual not found }
+  /economic-residuals/{allocationKey}/resolve:
+    post:
+      operationId: resolveEconomicResidual
+      tags: [economics]
+      summary: Safely resolve an offered residual candidate
+      parameters:
+        - name: allocationKey
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EconomicResidualResolutionInput" }
+      responses:
+        "200":
+          description: Decision accepted and account rebuilt
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EconomicResidualDetail" }
+        "400": { description: Invalid request }
+        "404": { description: Residual not found }
+        "409": { description: "Stale, duplicate, or invalid candidate" }
+  /historical-basis:
+    get:
+      operationId: listHistoricalBasis
+      tags: [economics]
+      parameters:
+        - $ref: "#/components/parameters/AccountIdentifier"
+        - name: symbol
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Historical basis evidence
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/HistoricalBasis" } }
+    post:
+      operationId: createHistoricalBasis
+      tags: [economics]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HistoricalBasisInput" }
+      responses:
+        "201":
+          description: Basis evidence created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HistoricalBasis" }
+        "400": { description: Invalid basis evidence }
+  /historical-basis/{id}/deactivate:
+    post:
+      operationId: deactivateHistoricalBasis
+      tags: [economics]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: number }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HistoricalBasisDeactivationInput" }
+      responses:
+        "200":
+          description: Basis deactivated and account rebuilt
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HistoricalBasis" }
+        "404": { description: Basis not found }
+        "409": { description: Already inactive or concurrent update }
+  /report-completeness:
+    get:
+      operationId: getReportCompleteness
+      tags: [economics]
+      parameters:
+        - $ref: "#/components/parameters/AccountIdentifier"
+      responses:
+        "200":
+          description: Independent report completeness areas
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportCompleteness" }
+  /wheel/campaigns:
+    get:
+      operationId: listWheelCampaigns
+      tags: [wheel]
+      summary: List reconstructed wheel campaigns
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [put_open, call_phase, open, partially_closed, closed, needs_review]
+        - $ref: "#/components/parameters/AnalysisPeriod"
+        - $ref: "#/components/parameters/AnalysisStartDate"
+        - $ref: "#/components/parameters/AnalysisEndDate"
+        - $ref: "#/components/parameters/AccountIdentifier"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/CampaignStatus"
+      responses:
+        "200":
+          description: Wheel campaigns
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WheelCampaign"
+  /wheel/campaigns/{campaignId}:
+    get:
+      operationId: getWheelCampaign
+      tags: [wheel]
+      summary: Get a wheel campaign report
+      parameters:
+        - name: campaignId
+          in: path
+          required: true
+          schema:
+            type: number
+        - $ref: "#/components/parameters/AnalysisPeriod"
+        - $ref: "#/components/parameters/AnalysisStartDate"
+        - $ref: "#/components/parameters/AnalysisEndDate"
+        - $ref: "#/components/parameters/AccountIdentifier"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/CampaignStatus"
+      responses:
+        "200":
+          description: Campaign report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WheelCampaignDetail"
+        "404":
+          description: Campaign not found
+components:
+  parameters:
+    AnalysisPeriod:
+      name: period
+      in: query
+      schema:
+        type: string
+        enum: [1W, 1M, 3M, 6M, YTD, ALL, CUSTOM]
+        default: ALL
+    AnalysisStartDate:
+      name: startDate
+      in: query
+      schema:
+        type: string
+        format: date
+    AnalysisEndDate:
+      name: endDate
+      in: query
+      schema:
+        type: string
+        format: date
+    AccountIdentifier:
+      name: accountIdentifier
+      in: query
+      schema:
+        type: string
+    CampaignId:
+      name: campaignId
+      in: query
+      schema:
+        type: number
+    CampaignStatus:
+      name: campaignStatus
+      in: query
+      schema:
+        type: string
+        enum: [open, closed, needs_review]
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    Trade:
+      type: object
+      required: [id, symbol, side, quantity, entryPrice, exitPrice, realizedPnl, openedAt, closedAt, outcome, source]
+      properties:
+        id: { type: number }
+        symbol: { type: string }
+        side: { type: string, enum: [long, short] }
+        quantity: { type: number }
+        entryPrice: { type: number }
+        exitPrice: { type: number }
+        realizedPnl: { type: number }
+        openedAt: { type: string, format: date-time }
+        closedAt: { type: string, format: date-time }
+        outcome: { type: string, enum: [win, loss, breakeven] }
+        source: { type: string }
+        notes: { type: ["string", "null"] }
+    TradeInput:
+      type: object
+      required: [symbol, side, quantity, entryPrice, exitPrice, realizedPnl, openedAt, closedAt]
+      properties:
+        symbol: { type: string, minLength: 1 }
+        side: { type: string, enum: [long, short] }
+        quantity: { type: number }
+        entryPrice: { type: number }
+        exitPrice: { type: number }
+        realizedPnl: { type: number }
+        openedAt: { type: string, format: date-time }
+        closedAt: { type: string, format: date-time }
+        notes: { type: string }
+        rawOrdinal: { type: number }
+        accountIdentifier: { type: string }
+        sourceIdentity: { type: string }
+        sourceFingerprint: { type: string }
+        supersedesId: { type: ["number", "null"] }
+        actor: { type: string, minLength: 1, default: api }
+        identityProvenance: { type: string, enum: [broker_transaction_id, deterministic_fallback] }
+    Import:
+      type: object
+      required: [id, filename, importedAt, tradeCount, totalPnl, sourceFormat, sourceRecordCount, status, duplicateCount, newTransactionCount, updatedCount, rejectedCount, needsReviewCount, accountBreakdown]
+      properties:
+        id: { type: number }
+        filename: { type: string }
+        importedAt: { type: string, format: date-time }
+        tradeCount: { type: number }
+        totalPnl: { type: number }
+        sourceFormat: { type: string }
+        sourceCoverageStart: { type: ["string", "null"], format: date-time }
+        sourceCoverageEnd: { type: ["string", "null"], format: date-time }
+        requestedStartDate: { type: ["string", "null"], format: date }
+        requestedEndDate: { type: ["string", "null"], format: date }
+        accountIdentifier: { type: ["string", "null"] }
+        sourceRecordCount: { type: number }
+        status: { type: string, enum: [processing, completed, partial, failed] }
+        duplicateCount: { type: number }
+        newTransactionCount: { type: number }
+        updatedCount: { type: number }
+        rejectedCount: { type: number }
+        needsReviewCount: { type: number }
+        accountBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccountImportReconciliation"
+        accountResolutionHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccountResolutionHistory"
+        accountConfirmation:
+          type: ["object", "null"]
+          additionalProperties: true
+    AccountImportReconciliation:
+      type: object
+      required: [accountIdentifier, label, sourceCoverageStart, sourceCoverageEnd, sourceRecordCount, newCount, duplicateCount, updatedCount, needsReviewCount]
+      properties:
+        accountIdentifier: { type: string }
+        label: { type: string }
+        sourceCoverageStart: { type: ["string", "null"], format: date-time }
+        sourceCoverageEnd: { type: ["string", "null"], format: date-time }
+        sourceRecordCount: { type: number }
+        newCount: { type: number }
+        duplicateCount: { type: number }
+        updatedCount: { type: number }
+        needsReviewCount: { type: number }
+        resolvedCount: { type: number }
+        unresolvedCount: { type: number }
+        resolutionStatus: { type: string, enum: [not_needed, needs_review, resolved] }
+    AccountResolutionHistory:
+      type: object
+      required: [accountIdentifier, resolvedAt, rowCount, rawRowIds]
+      properties:
+        accountIdentifier: { type: string }
+        resolvedAt: { type: string, format: date-time }
+        rowCount: { type: number }
+        rawRowIds:
+          type: array
+          items: { type: number }
+    ImportSourceRecord:
+      type: object
+      required: [id, importId, ordinal, rawJson, rawRecordText, recordKind, parseError, rowStatus, accountIdentifier, resolutionStatus, normalizedEventCount, normalizedTradeCount]
+      properties:
+        id: { type: number }
+        importId: { type: number }
+        ordinal: { type: number }
+        rawJson: { type: string }
+        rawRecordText: { type: ["string", "null"] }
+        recordKind: { type: string, enum: [activity, blank, footer, malformed] }
+        parseError: { type: ["string", "null"] }
+        rowStatus: { type: string }
+        accountIdentifier: { type: string }
+        resolutionStatus: { type: string }
+        normalizedEventCount: { type: number }
+        normalizedTradeCount: { type: number }
+    ImportSourceRecordPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportSourceRecord"
+        total: { type: number }
+        limit: { type: number }
+        offset: { type: number }
+    ImportAccountResolutionInput:
+      type: object
+      required: [rawRowIds, accountIdentifier, confirmAccountingEffect]
+      properties:
+        rawRowIds:
+          type: array
+          minItems: 1
+          items: { type: number }
+        accountIdentifier: { type: string, minLength: 1 }
+        confirmAccountingEffect: { type: boolean }
+    ImportReviewNormalizedEvent:
+      type: object
+      required: [id, symbol, occurredAt, eventType, instrument, quantity, amount, activityClass, accountIdentifier]
+      properties:
+        id: { type: number }
+        symbol: { type: string }
+        occurredAt: { type: string, format: date-time }
+        eventType: { type: string }
+        instrument: { type: string }
+        optionType: { type: ["string", "null"] }
+        quantity: { type: number }
+        strike: { type: ["number", "null"] }
+        expiration: { type: ["string", "null"] }
+        price: { type: ["number", "null"] }
+        amount: { type: number }
+        fees: { type: number }
+        activityClass: { type: string }
+        accountIdentifier: { type: string }
+    ImportReviewNormalizedTrade:
+      type: object
+      required: [id, symbol, openedAt, closedAt, side, quantity, realizedPnl, accountIdentifier]
+      properties:
+        id: { type: number }
+        symbol: { type: string }
+        openedAt: { type: string, format: date-time }
+        closedAt: { type: string, format: date-time }
+        side: { type: string }
+        quantity: { type: number }
+        realizedPnl: { type: number }
+        accountIdentifier: { type: string }
+    ImportReviewCampaignCandidate:
+      type: object
+      required: [campaignKey, name, ticker, accountIdentifier, openingDate, status]
+      properties:
+        campaignKey: { type: string }
+        campaignId: { type: number }
+        name: { type: string }
+        ticker: { type: string }
+        accountIdentifier: { type: string }
+        openingDate: { type: string, format: date-time }
+        status: { type: string }
+    ImportReviewRow:
+      type: object
+      required: [id, importId, filename, sourceFormat, importedAt, ordinal, rawJson, sourceIdentity, sourceFingerprint, rowStatus, accountIdentifier, resolutionStatus, reviewType, resolutionDecision, resolutionTargetType, resolutionTargetId, resolutionTargetKey, resolvedAt, reviewReason, candidates, events, trades, conflicts]
+      properties:
+        id: { type: number }
+        importId: { type: number }
+        filename: { type: string }
+        sourceFormat: { type: string }
+        importedAt: { type: string, format: date-time }
+        ordinal: { type: number }
+        rawJson: { type: string }
+        sourceIdentity: { type: ["string", "null"] }
+        sourceFingerprint: { type: ["string", "null"] }
+        rowStatus: { type: string }
+        accountIdentifier: { type: string }
+        resolutionStatus: { type: string, enum: [needs_review, resolved] }
+        reviewType: { type: string, enum: [account_assignment, reconciliation_collision, campaign_link] }
+        resolutionDecision: { type: ["string", "null"], enum: [separate_record, duplicate, correction, assign_campaign, leave_unassigned, decide_later, null] }
+        resolutionTargetType: { type: ["string", "null"], enum: [event, trade, campaign, null] }
+        resolutionTargetId: { type: ["number", "null"] }
+        resolutionTargetKey: { type: ["string", "null"] }
+        resolvedAt: { type: ["string", "null"], format: date-time }
+        reviewReason: { type: ["string", "null"] }
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportReviewCampaignCandidate"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportReviewNormalizedEvent"
+        trades:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportReviewNormalizedTrade"
+        conflicts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportReviewConflict"
+    ImportReviewConflict:
+      type: object
+      required: [id, recordType, importId, filename, accountIdentifier, sourceIdentity, sourceFingerprint, symbol, quantity]
+      properties:
+        id: { type: number }
+        recordType: { type: string, enum: [event, trade] }
+        importId: { type: number }
+        filename: { type: string }
+        accountIdentifier: { type: string }
+        sourceIdentity: { type: ["string", "null"] }
+        sourceFingerprint: { type: ["string", "null"] }
+        symbol: { type: string }
+        occurredAt: { type: ["string", "null"], format: date-time }
+        openedAt: { type: ["string", "null"], format: date-time }
+        closedAt: { type: ["string", "null"], format: date-time }
+        eventType: { type: ["string", "null"] }
+        side: { type: ["string", "null"] }
+        quantity: { type: number }
+        amount: { type: ["number", "null"] }
+        realizedPnl: { type: ["number", "null"] }
+    ImportReviewResolutionInput:
+      type: object
+      required: [rawRowId, decision, confirmAccountingEffect]
+      properties:
+        rawRowId: { type: number }
+        decision: { type: string, enum: [separate_record, duplicate, correction, assign_campaign, leave_unassigned, decide_later] }
+        targetRecordType: { type: ["string", "null"], enum: [event, trade, null] }
+        targetRecordId: { type: ["number", "null"] }
+        targetCampaignId: { type: ["number", "null"] }
+        targetCampaignKey: { type: ["string", "null"] }
+        confirmAccountingEffect: { type: boolean }
+    ImportReviewResolution:
+      type: object
+      required: [rawRowId, importId, decision, accountIdentifier, rebuiltCampaignCount]
+      properties:
+        rawRowId: { type: number }
+        importId: { type: number }
+        decision: { type: string, enum: [separate_record, duplicate, correction, assign_campaign, leave_unassigned, decide_later] }
+        accountIdentifier: { type: string }
+        rebuiltCampaignCount: { type: number }
+    ImportAccountResolution:
+      type: object
+      required: [accountIdentifier, resolvedRowCount, importIds, rebuiltCampaignCount]
+      properties:
+        accountIdentifier: { type: string }
+        resolvedRowCount: { type: number }
+        importIds:
+          type: array
+          items: { type: number }
+        rebuiltCampaignCount: { type: number }
+    AccountSummary:
+      type: object
+      required: [accountIdentifier, label, sourceCoverageStart, sourceCoverageEnd, sourceRecordCount, importCount, needsReviewCount]
+      properties:
+        accountIdentifier: { type: string }
+        label: { type: string }
+        sourceCoverageStart: { type: ["string", "null"], format: date-time }
+        sourceCoverageEnd: { type: ["string", "null"], format: date-time }
+        sourceRecordCount: { type: number }
+        importCount: { type: number }
+        needsReviewCount: { type: number }
+    AccountReviewItem:
+      type: object
+      required: [id, importId, filename, ordinal, rawJson, recordKind, rowStatus, normalizedRecordCount]
+      properties:
+        id: { type: number }
+        importId: { type: number }
+        filename: { type: string }
+        ordinal: { type: number }
+        rawJson: { type: string }
+        rawRecordText: { type: ["string", "null"] }
+        recordKind: { type: string, enum: [activity, blank, footer, malformed] }
+        parseError: { type: ["string", "null"] }
+        sourceIdentity: { type: ["string", "null"] }
+        rowStatus: { type: string }
+        normalizedRecordCount: { type: number }
+    AccountAssignmentInput:
+      type: object
+      required: [rawRowIds, accountIdentifier]
+      properties:
+        rawRowIds:
+          type: array
+          minItems: 1
+          items: { type: number }
+        accountIdentifier: { type: string, minLength: 1 }
+    AccountAssignmentResult:
+      type: object
+      required: [assignedRowCount, assignedRecordCount, accountIdentifier]
+      properties:
+        assignedRowCount: { type: number }
+        assignedRecordCount: { type: number }
+        accountIdentifier: { type: string }
+    ImportInput:
+      type: object
+      required: [filename, trades]
+      properties:
+        filename: { type: string, minLength: 1 }
+        sourceFormat: { type: string }
+        requestedStartDate: { type: string, format: date }
+        requestedEndDate: { type: string, format: date }
+        accountIdentifier: { type: string }
+        accountConfirmation:
+          $ref: "#/components/schemas/AccountConfirmationInput"
+        trades:
+          type: array
+          items:
+            $ref: "#/components/schemas/TradeInput"
+        rawRows:
+          type: array
+          items:
+            $ref: "#/components/schemas/RawImportRowInput"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/TradingEventInput"
+    RawImportRowInput:
+      type: object
+      required: [ordinal, rawJson]
+      properties:
+        ordinal: { type: number }
+        rawJson: { type: string, minLength: 1 }
+        rawRecordText: { type: string }
+        recordKind: { type: string, enum: [activity, blank, footer, malformed] }
+        parseError: { type: string }
+    TradingEventInput:
+      type: object
+      required: [symbol, occurredAt, eventType, instrument, quantity, amount]
+      properties:
+        symbol: { type: string, minLength: 1 }
+        occurredAt: { type: string, format: date-time }
+        eventType:
+          type: string
+          enum: [sell_to_open, buy_to_open, sell_to_close, buy_to_close, expired, assigned, called_away, stock_acquired, stock_disposed, unknown]
+        instrument: { type: string, enum: [option, stock, account] }
+        optionType: { type: ["string", "null"], enum: [put, call, null] }
+        quantity: { type: number, minimum: 0 }
+        strike: { type: ["number", "null"] }
+        expiration: { type: ["string", "null"], format: date }
+        price: { type: ["number", "null"] }
+        amount: { type: number }
+        fees: { type: number, minimum: 0, default: 0 }
+        rawOrdinal: { type: ["number", "null"] }
+        notes: { type: string }
+        activityClass: { type: string, enum: [trading, cash_movement, income, corporate_action, account_activity, unknown] }
+        accountIdentifier: { type: string }
+        sourceIdentity: { type: string }
+        sourceFingerprint: { type: string }
+        identityProvenance: { type: string, enum: [broker_transaction_id, deterministic_fallback] }
+        metadata: { type: object, additionalProperties: true }
+    AccountConfirmationInput:
+      type: object
+      required: [confirmed, method]
+      properties:
+        confirmed: { type: boolean }
+        method: { type: string, enum: [user_confirmed] }
+    AnalysisPeriod:
+      type: object
+      required: [period, label]
+      properties:
+        period: { type: string, enum: [1W, 1M, 3M, 6M, YTD, ALL, CUSTOM] }
+        label: { type: string }
+        startDate: { type: ["string", "null"], format: date }
+        endDate: { type: ["string", "null"], format: date }
+        availableStart: { type: ["string", "null"], format: date }
+        availableEnd: { type: ["string", "null"], format: date }
+    Dashboard:
+      type: object
+      required: [totalPnl, winRate, profitFactor, tradeCount, winningTrades, losingTrades, averageWin, averageLoss, maxDrawdown, bestDay, worstDay, streak, analysisPeriod]
+      properties:
+        totalPnl: { type: number }
+        winRate: { type: number }
+        profitFactor: { type: number }
+        tradeCount: { type: number }
+        winningTrades: { type: number }
+        losingTrades: { type: number }
+        averageWin: { type: number }
+        averageLoss: { type: number }
+        maxDrawdown: { type: number }
+        bestDay: { type: number }
+        worstDay: { type: number }
+        streak: { type: number }
+        analysisPeriod:
+          $ref: "#/components/schemas/AnalysisPeriod"
+        equityCurve:
+          type: array
+          items:
+            $ref: "#/components/schemas/EquityPoint"
+    EquityPoint:
+      type: object
+      required: [date, pnl]
+      properties:
+        date: { type: string, format: date }
+        pnl: { type: number }
+    SymbolPerformance:
+      type: object
+      required: [symbol, trades, pnl, winRate]
+      properties:
+        symbol: { type: string }
+        trades: { type: number }
+        pnl: { type: number }
+        winRate: { type: number }
+    EconomicResidualResolutionInput:
+      type: object
+      required: [expectedDiagnosisVersion, expectedAllocationRuleVersion, expectedUpdatedAt, expectedDecisionVersion]
+      properties:
+        selectedCandidateKey: { type: ["string", "null"] }
+        permanentUnresolved: { type: boolean, default: false }
+        expectedDiagnosisVersion: { type: string, minLength: 1 }
+        expectedAllocationRuleVersion: { type: string, minLength: 1 }
+        expectedUpdatedAt: { type: string, format: date-time }
+        expectedDecisionVersion: { type: number, minimum: 0 }
+        actor: { type: string, minLength: 1, default: api }
+    HistoricalBasisInput:
+      type: object
+      required: [accountIdentifier, symbol, quantityMicros, totalBasisCents, evidenceLabel, sourceIdentity]
+      properties:
+        accountIdentifier: { type: string, minLength: 1 }
+        symbol: { type: string, minLength: 1 }
+        quantityMicros: { type: number, minimum: 1 }
+        totalBasisCents: { type: number, minimum: 1 }
+        acquiredAt: { type: ["string", "null"], format: date-time }
+        evidenceLabel: { type: string, minLength: 1 }
+        evidenceNotes: { type: string, default: "" }
+        evidenceKind: { type: string, enum: [user_supplied, broker_statement], default: user_supplied }
+        confidence: { type: string, enum: [confirmed, estimated], default: confirmed }
+        sourceIdentity: { type: string, minLength: 1 }
+        sourceFingerprint: { type: string }
+        supersedesId: { type: ["number", "null"] }
+        actor: { type: string, minLength: 1, default: api }
+    HistoricalBasis:
+      allOf:
+        - $ref: "#/components/schemas/HistoricalBasisInput"
+        - type: object
+          required: [id, active, createdAt]
+          properties:
+            id: { type: number }
+            active: { type: boolean }
+            createdAt: { type: string, format: date-time }
+            deactivatedAt: { type: ["string", "null"], format: date-time }
+            deactivatedBy: { type: ["string", "null"] }
+            status: { type: string, enum: [active, superseded, deactivated] }
+            supersedesId: { type: ["number", "null"] }
+            supersededAt: { type: ["string", "null"], format: date-time }
+            supersededBy: { type: ["string", "null"] }
+    HistoricalBasisDeactivationInput:
+      type: object
+      properties:
+        actor: { type: string, minLength: 1, default: api }
+    EconomicResidualSummary:
+      type: object
+      required: [items, total, offset, limit, completeness]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/EconomicResidualGroup" } }
+        total: { type: number }
+        offset: { type: number }
+        limit: { type: number }
+        completeness: { $ref: "#/components/schemas/ReportCompleteness" }
+    EconomicResidualDetail:
+      type: object
+      required: [allocationKey, diagnosis, candidates, evidence, decisionHistory, status, completeness]
+      properties:
+        allocationKey: { type: string }
+        accountIdentifier: { type: string }
+        ticker: { type: string }
+        eventType: { type: string }
+        quantityUnit: { type: string, enum: [contracts, shares] }
+        requestedQuantityMicros: { type: number }
+        allocatedQuantityMicros: { type: number }
+        cashCents: { type: number }
+        feesCents: { type: number }
+        allocationRuleVersion: { type: string }
+        updatedAt: { type: string, format: date-time }
+        decisionVersion: { type: number }
+        diagnosis: { type: object, additionalProperties: true }
+        candidates: { type: array, items: { type: string } }
+        evidence: { type: array, items: { type: object, additionalProperties: true } }
+        decisionHistory: { type: array, items: { type: object, additionalProperties: true } }
+        status: { type: string }
+        completeness: { $ref: "#/components/schemas/ReportCompleteness" }
+    EconomicResidualGroup:
+      type: object
+      required: [key, allocationKeys, representativeAllocationKey, accountIdentifier, ticker, eventType, quantityUnit, edgeCount, requestedQuantityMicros, allocatedQuantityMicros, cashCents, feesCents, impactFlags, economicsState, resolutionClass, resolutionPath]
+      properties:
+        key: { type: string }
+        allocationKeys: { type: array, items: { type: string } }
+        representativeAllocationKey: { type: string }
+        accountIdentifier: { type: string }
+        ticker: { type: string }
+        eventType: { type: string }
+        quantityUnit: { type: string, enum: [contracts, shares] }
+        edgeCount: { type: number }
+        requestedQuantityMicros: { type: number }
+        allocatedQuantityMicros: { type: number }
+        cashCents: { type: number }
+        feesCents: { type: number }
+        impactFlags: { type: object, additionalProperties: true }
+        economicsState: { type: string }
+        resolutionClass: { type: string }
+        resolutionPath: { type: string }
+    ReportCompleteness:
+      type: object
+      additionalProperties:
+        type: object
+        required: [status, blockingCodes, blockingCount, summary]
+        properties:
+          status: { type: string, enum: [confirmed, partial, incomplete, unavailable] }
+          blockingCodes: { type: array, items: { type: string } }
+          blockingCount: { type: number }
+          summary: { type: string }
+    WheelSummary:
+      type: object
+      required: [campaignCount, openCampaigns, closedCampaigns, totalPnl, periodPnl, averageRoi, needsReview, activeInPeriod, analysisPeriod]
+      properties:
+        campaignCount: { type: number }
+        openCampaigns: { type: number }
+        closedCampaigns: { type: number }
+        totalPnl: { type: number }
+        periodPnl: { type: number }
+        averageRoi: { type: number }
+        needsReview: { type: number }
+        activeInPeriod: { type: number }
+        analysisPeriod:
+          $ref: "#/components/schemas/AnalysisPeriod"
+    WheelCampaign:
+      type: object
+      required: [id, name, ticker, accountIdentifier, status, openingDate, totalPnl, realizationStatus, realizedOptionPnl, realizedStockPnl, totalRealizedPnl, remainingStockShares, remainingStockBasis, ledgerPnl, campaignRoi, durationDays, legCount, callRounds, confidence, needsReview, periodPnl, inAnalysisPeriod]
+      properties:
+        id: { type: number }
+        name: { type: string }
+        ticker: { type: string }
+        accountIdentifier: { type: string }
+        status: { type: string, enum: [put_open, call_phase, open, partially_closed, closed, needs_review] }
+        openingDate: { type: string, format: date-time }
+        closingDate: { type: ["string", "null"], format: date-time }
+        totalPnl: { type: number }
+        realizationStatus: { type: string, enum: [open, partially_realized, fully_realized] }
+        realizedOptionPnl: { type: number }
+        realizedStockPnl: { type: number }
+        totalRealizedPnl: { type: number }
+        remainingStockShares: { type: number }
+        remainingStockBasis: { type: number }
+        ledgerPnl: { type: number }
+        campaignRoi: { type: number }
+        durationDays: { type: number }
+        legCount: { type: number }
+        callRounds: { type: number }
+        confidence: { type: string, enum: [high, medium, needs_review] }
+        needsReview: { type: boolean }
+        explanation: { type: string }
+        periodPnl: { type: number }
+        inAnalysisPeriod: { type: boolean }
+    WheelLeg:
+      type: object
+      required: [id, legNumber, kind, outcome, contractsOpened, contractsClosed, contractsRemaining, premiumReceived, closingCost, fees, netPnl, capital, roi, daysOpen, returnPerDay, confidence]
+      properties:
+        id: { type: number }
+        legNumber: { type: number }
+        kind: { type: string, enum: [put, call] }
+        outcome: { type: string, enum: [open, expired, bought_to_close, assigned, called_away, rolled, partially_closed, needs_review] }
+        openDate: { type: ["string", "null"], format: date-time }
+        closeDate: { type: ["string", "null"], format: date-time }
+        strike: { type: ["number", "null"] }
+        expiration: { type: ["string", "null"], format: date }
+        contractsOpened: { type: number }
+        contractsClosed: { type: number }
+        contractsRemaining: { type: number }
+        premiumReceived: { type: number }
+        closingCost: { type: number }
+        fees: { type: number }
+        netPnl: { type: number }
+        capital: { type: number }
+        roi: { type: number }
+        daysOpen: { type: number }
+        returnPerDay: { type: number }
+        confidence: { type: string, enum: [high, medium, needs_review] }
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/WheelEvent"
+    WheelEvent:
+      type: object
+      required: [id, eventType, occurredAt, amount, quantity, instrument]
+      properties:
+        id: { type: number }
+        eventType: { type: string }
+        occurredAt: { type: string, format: date-time }
+        amount: { type: number }
+        quantity: { type: number }
+        instrument: { type: string }
+        strike: { type: ["number", "null"] }
+        notes: { type: ["string", "null"] }
+    StockLot:
+      type: object
+      required: [id, sharesAcquired, sharesDisposed, sharesRemaining, originalAssignmentPrice, originalAssignmentCost, allocatedPutPremium, realizedStockPnl, realizationStatus, putAdjustedBasis, lifetimeEffectiveBasis, stockPnl]
+      properties:
+        id: { type: number }
+        sharesAcquired: { type: number }
+        sharesDisposed: { type: number }
+        sharesRemaining: { type: number }
+        originalAssignmentPrice: { type: number }
+        originalAssignmentCost: { type: number }
+        allocatedPutPremium: { type: number }
+        realizedStockPnl: { type: number }
+        realizationStatus: { type: string, enum: [open, partially_realized, fully_realized, needs_review] }
+        putAdjustedBasis: { type: number }
+        lifetimeEffectiveBasis: { type: number }
+        stockPnl: { type: number }
+    WheelCampaignDetail:
+      allOf:
+        - $ref: "#/components/schemas/WheelCampaign"
+        - type: object
+          required: [initialPutStrike, shares, originalCapital, putPremium, callPremium, grossPremium, closingCosts, netOptionPnl, stockPnl, putAdjustedBasis, lifetimeEffectiveBasis, profitPerShare, capitalDays, returnPerDay, cashFlowPnl, reconciled, legs, stockLots, periodPnl, analysisPeriod]
+          properties:
+            initialPutStrike: { type: ["number", "null"] }
+            shares: { type: number }
+            originalCapital: { type: number }
+            putPremium: { type: number }
+            callPremium: { type: number }
+            grossPremium: { type: number }
+            closingCosts: { type: number }
+            netOptionPnl: { type: number }
+            stockPnl: { type: number }
+            putAdjustedBasis: { type: ["number", "null"] }
+            lifetimeEffectiveBasis: { type: ["number", "null"] }
+            profitPerShare: { type: number }
+            capitalDays: { type: number }
+            returnPerDay: { type: number }
+            cashFlowPnl: { type: number }
+            reconciled: { type: boolean }
+            periodPnl: { type: number }
+            analysisPeriod:
+              $ref: "#/components/schemas/AnalysisPeriod"
+            legs:
+              type: array
+              items:
+                $ref: "#/components/schemas/WheelLeg"
+            stockLots:
+              type: array
+              items:
+                $ref: "#/components/schemas/StockLot"
